@@ -70,7 +70,7 @@ const AuthorType = new GraphQLObjectType({
     books: {
       type: new GraphQLList(BookType),
       resolve: (author) => {
-        return Book.findById(author.authorId) || [];
+        return Book.find({ authorId: author._id }) || [];
       },
     },
   }),
