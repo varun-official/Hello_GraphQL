@@ -1,7 +1,11 @@
 /** @format */
+require("dotenv").config();
 
 const express = require("express");
+const mongoose = require("mongoose");
 const expressGraphQL = require("express-graphql").graphqlHTTP;
+const Book = require("./models/Book");
+const Author = require("./models/Author");
 const {
   GraphQLSchema,
   GraphQLObjectType,
@@ -12,34 +16,46 @@ const {
 } = require("graphql");
 const app = express();
 
-const authors = [
-  { id: 1, name: "J. K. Rowling" },
-  { id: 2, name: "J. R. R. Tolkien" },
-  { id: 3, name: "Brent Weeks" },
-];
+mongoose
+  .connect(process.env.MONGODB_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
 
-const books = [
-  { id: 1, name: "Harry Potter and the Chamber of Secrets", authorId: 1 },
-  { id: 2, name: "Harry Potter and the Prisoner of Azkaban", authorId: 1 },
-  { id: 3, name: "Harry Potter and the Goblet of Fire", authorId: 1 },
-  { id: 4, name: "The Fellowship of the Ring", authorId: 2 },
-  { id: 5, name: "The Two Towers", authorId: 2 },
-  { id: 6, name: "The Return of the King", authorId: 2 },
-  { id: 7, name: "The Way of Shadows", authorId: 3 },
-  { id: 8, name: "Beyond the Shadows", authorId: 3 },
-];
+  .then(() => {
+    console.log("DB Connection established");
+  });
+
+//static data
+
+// const authors = [
+//   { id: 1, name: "J. K. Rowling" },
+//   { id: 2, name: "J. R. R. Tolkien" },
+//   { id: 3, name: "Brent Weeks" },
+// ];
+
+// const books = [
+//   { id: 1, name: "Harry Potter and the Chamber of Secrets", authorId: 1 },
+//   { id: 2, name: "Harry Potter and the Prisoner of Azkaban", authorId: 1 },
+//   { id: 3, name: "Harry Potter and the Goblet of Fire", authorId: 1 },
+//   { id: 4, name: "The Fellowship of the Ring", authorId: 2 },
+//   { id: 5, name: "The Two Towers", authorId: 2 },
+//   { id: 6, name: "The Return of the King", authorId: 2 },
+//   { id: 7, name: "The Way of Shadows", authorId: 3 },
+//   { id: 8, name: "Beyond the Shadows", authorId: 3 },
+// ];
 
 const BookType = new GraphQLObjectType({
   name: "Book",
   description: "This represents a book written by an author",
   fields: () => ({
-    id: { type: new GraphQLNonNull(GraphQLInt) },
+    _id: { type: new GraphQLNonNull(GraphQLString) },
     name: { type: new GraphQLNonNull(GraphQLString) },
-    authorId: { type: new GraphQLNonNull(GraphQLInt) },
+    authorId: { type: new GraphQLNonNull(GraphQLString) },
     author: {
       type: AuthorType,
       resolve: (book) => {
-        return authors.find((author) => author.id === book.authorId);
+        return Author.findById(book.authorId) || [];
       },
     },
   }),
@@ -49,12 +65,12 @@ const AuthorType = new GraphQLObjectType({
   name: "Author",
   description: "This represents a author of a book",
   fields: () => ({
-    id: { type: new GraphQLNonNull(GraphQLInt) },
+    _id: { type: new GraphQLNonNull(GraphQLString) },
     name: { type: new GraphQLNonNull(GraphQLString) },
     books: {
       type: new GraphQLList(BookType),
       resolve: (author) => {
-        return books.filter((book) => book.authorId === author.id);
+        return Book.findById(author.authorId) || [];
       },
     },
   }),
@@ -70,17 +86,17 @@ const RootQueryType = new GraphQLObjectType({
       args: {
         id: { type: GraphQLInt },
       },
-      resolve: (parent, args) => books.find((book) => book.id === args.id),
+      resolve: (parent, args) => Book.findById(args.id),
     },
     books: {
       type: new GraphQLList(BookType),
       description: "List of All Books",
-      resolve: () => books,
+      resolve: () => Book.find(),
     },
     authors: {
       type: new GraphQLList(AuthorType),
       description: "List of All Authors",
-      resolve: () => authors,
+      resolve: () => Author.find(),
     },
     author: {
       type: AuthorType,
@@ -88,8 +104,7 @@ const RootQueryType = new GraphQLObjectType({
       args: {
         id: { type: GraphQLInt },
       },
-      resolve: (parent, args) =>
-        authors.find((author) => author.id === args.id),
+      resolve: (parent, args) => Author.findById(args.id),
     },
   }),
 });
@@ -103,15 +118,14 @@ const RootMutationType = new GraphQLObjectType({
       description: "Add a book",
       args: {
         name: { type: new GraphQLNonNull(GraphQLString) },
-        authorId: { type: new GraphQLNonNull(GraphQLInt) },
+        authorId: { type: new GraphQLNonNull(GraphQLString) },
       },
-      resolve: (parent, args) => {
-        const book = {
-          id: books.length + 1,
+      resolve: async (parent, args) => {
+        const book = new Book({
           name: args.name,
           authorId: args.authorId,
-        };
-        books.push(book);
+        });
+        book.save();
         return book;
       },
     },
@@ -122,8 +136,8 @@ const RootMutationType = new GraphQLObjectType({
         name: { type: new GraphQLNonNull(GraphQLString) },
       },
       resolve: (parent, args) => {
-        const author = { id: authors.length + 1, name: args.name };
-        authors.push(author);
+        const author = new Author({ name: args.name });
+        author.save();
         return author;
       },
     },
